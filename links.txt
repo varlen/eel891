@@ -1,4 +1,6 @@
 http://www.del.ufrj.br/~heraldo/eel891.html
 
+http://pandas.pydata.org/pandas-docs/version/0.23/generated/pandas.DataFrame.loc.html
+
 https://www.kaggle.com/pmarcelino/comprehensive-data-exploration-with-python/notebook
 https://www.kaggle.com/serigne/stacked-regressions-top-4-on-leaderboard
