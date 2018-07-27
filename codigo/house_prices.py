@@ -196,24 +196,25 @@ category_grade_mapping = {
 }
 df_train.replace(category_grade_mapping, inplace = True)
 
-# Scatterplots das variaveis numericas
+
 var_cat = [ col 
             for col in df_train.columns 
             if df_train[col].describe().dtype == 'object']
 
-for var in var_num :
-    data = pd.concat([df_train['SalePrice'], df_train[var]], axis=1)
-    data.plot.scatter(x=var, y='SalePrice', ylim=(0,800000))
-
-# Boxplot das variaveis categoricas    
 var_num = [ col 
             for col in df_train.columns 
             if df_train[col].describe().dtype != 'object']
 
-for var in var_cat:
-    sns.boxplot(y = "SalePrice", x = var, data = df_train)
-    sns.stripplot(y = "SalePrice", x = var, data = df_train)
-    plt.show()
+# Scatterplots das variaveis numericas
+#for var in var_num :
+#    data = pd.concat([df_train['SalePrice'], df_train[var]], axis=1)
+#    data.plot.scatter(x=var, y='SalePrice', ylim=(0,800000))   
+
+# Boxplot das variaveis categoricas 
+#for var in var_cat:
+#    sns.boxplot(y = "SalePrice", x = var, data = df_train)
+#    sns.stripplot(y = "SalePrice", x = var, data = df_train)
+#    plt.show()
 
 # Mapa de calor 
 corrmat = df_train.corr()
@@ -230,25 +231,51 @@ print(cols)
 # O mapa de calor mostra as variaveis numericas OverallQual, GrLivArea, ExterQual, 
 # KitchenQual, 'GarageCars, GarageArea, TotalBsmtSF, 1stFlrSF e BsmtQual 
 # como mais correlacionadas ao preço de venda da casa
-for var in cols :
-    data = pd.concat([df_train['SalePrice'], df_train[var]], axis=1)
-    data.plot.scatter(x=var, y='SalePrice', ylim=(0,800000))
+for var in cols:
+    if var != 'SalePrice':
+        data = pd.concat([df_train['SalePrice'], df_train[var]], axis=1)
+        data.plot.scatter(x=var, y='SalePrice', ylim=(0,800000))
+    
+# O scatterplot das variáveis mostra que existem alguns outliers nas features mais correlacionadas. 
+# Vamos eliminar estes outliers
+df_train.drop(df_train[
+        (df_train['GrLivArea']>4000) & (df_train['SalePrice']<200000)
+        ].index, inplace=True)
+df_train.drop(df_train[
+        (df_train['1stFlrSF']>3000) & (df_train['SalePrice']<200000)
+        ].index, inplace=True)
+df_train.drop(df_train[
+        (df_train['TotalBsmtSF']>6000) & (df_train['SalePrice']<200000)
+        ].index, inplace=True)
+df_train.drop(df_train[
+        (df_train['GarageArea']>1200)
+        ].index, inplace=True)
+    
+# Agora, observemos a distribuição destas variáveis
+sns.distplot(df_train['GrLivArea'] , bins=50,fit=norm);
+plt.show()
+sns.distplot(df_train['1stFlrSF'] , bins=50,fit=norm);
+plt.show()
+sns.distplot(df_train['TotalBsmtSF'] , bins=50,fit=norm);
+plt.show()
+sns.distplot(df_train['GarageArea'] , bins=50,fit=norm);
+plt.show()
+
     
 # Gerar dummies das categoricas
 df_train = pd.get_dummies(df_train)
     
 # 1o treinamento
-from sklearn.ensemble import RandomForestRegressor
+from sklearn.linear_model import LinearRegression
 
 train_set = df_train[:train_len]
 X_train, X_test, Y_train, Y_test = train_test_split(
         train_set.drop('SalePrice',axis=1), train_set.SalePrice)
 
-rfr = RandomForestRegressor(n_estimators=100)
-rfr.fit(X_train, Y_train)
+lr = LinearRegression()
+lr.fit(X_train, Y_train)
 
-scr_tr = rfr.score(X_train, Y_train)
-scr_ts = rfr.score(X_test, Y_test)
+scr_tr = lr.score(X_train, Y_train)
+scr_ts = lr.score(X_test, Y_test)
 
-result = rfr.predict(df_train[train_len:].drop('SalePrice', axis=1))
-
+result = lr.predict(df_train[train_len:].drop('SalePrice', axis=1))
