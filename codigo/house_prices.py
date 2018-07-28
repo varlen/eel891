@@ -30,7 +30,7 @@ df_train.info()
 total = df_train.isnull().sum().sort_values(ascending=False)
 percent = (df_train.isnull().sum() / df_train.isnull().count()).sort_values(ascending=False)
 missing_data = pd.concat([total, percent], axis=1, keys=['Total', 'Percent'])
-missing_data.head(20)
+missing_data.head(10)
 
 # Para algumas variáveis, a descrição fornece um insight de como
 # completar os dados faltantes.
@@ -94,6 +94,10 @@ data = pd.concat([df_train['SalePrice'], df_train['MoSold']], axis=1)
 data.plot.scatter(x='MoSold', y='SalePrice')
 plt.show()
 sns.countplot(data['MoSold'])
+# De acordo com os gráficos, o período do ano com maior vendas
+#  é também o período com maior variancia de preços.
+# Assim, elimina-se MoSold do dataset sem culpa
+df_train.drop("MoSold", axis=1, inplace=True)
 
 # MiscFeature também é uma variavel passivel de eliminação, pois não aparece
 # em quase nenhum item do conjunto de dados.
@@ -101,6 +105,7 @@ data = pd.concat([df_train['SalePrice'], df_train['MiscFeature']], axis=1)
 sns.boxplot(x='MiscFeature', y='SalePrice', data = df_train)
 plt.show()
 sns.countplot(data['MiscFeature'])
+df_train.drop("MiscFeature", axis=1, inplace=True)
 
 data = pd.concat([df_train['SalePrice'], df_train['MiscVal']], axis=1)
 data.plot.scatter(x='MiscVal', y='SalePrice')
@@ -108,10 +113,6 @@ plt.show()
 sns.countplot(data['MiscVal'])
 df_train.drop("MiscVal", axis=1, inplace=True)
 
-# De acordo com os gráficos, o período do ano com maior vendas
-#  é também o período com maior variancia de preços.
-# Assim, elimina-se MoSold do dataset sem culpa
-df_train.drop("MoSold", axis=1, inplace=True)
 
 # Observando a descrição do dataset para a coluna Fence levanta a suspeita de 
 # que esta não forneça informações relevantes. Pela contagem de valores mostrada
@@ -131,6 +132,11 @@ sns.countplot(data['MSZoning'])
 # Observando os graficos, observa-se que não existe informação para zona A.
 # Sendo assim, assumi que os valores faltantes na verdade são de zona A.
 df_train.loc[:, 'MSZoning'] = df_train.loc[:, 'MSZoning'].fillna('A')
+
+data = pd.concat([df_train['SalePrice'], df_train['MSZoning']], axis=1)
+sns.boxplot(x='MSZoning', y='SalePrice', data = df_train)
+plt.show()
+sns.countplot(data['MSZoning'])
 
 # Algumas variaveis são categoricas, porém as categorias estão ordenadas.
 # Para estas variaveis, as categorias serão mapeadas em graus numéricos.
@@ -217,7 +223,7 @@ var_num = [ col
 #    plt.show()
 
 # Mapa de calor 
-corrmat = df_train.corr()
+corrmat = df_train[:train_len].corr()
 cols = corrmat.nlargest(10, 'SalePrice')['SalePrice'].index
 cm = np.corrcoef(df_train[cols].values.T)
 sns.set(font_scale=1.25)
@@ -238,20 +244,20 @@ for var in cols:
     
 # O scatterplot das variáveis mostra que existem alguns outliers nas features mais correlacionadas. 
 # Vamos eliminar estes outliers
-df_train.drop(df_train[
+df_train[:train_len].drop(df_train[
         (df_train['GrLivArea']>4000) & (df_train['SalePrice']<200000)
         ].index, inplace=True)
-df_train.drop(df_train[
+df_train[:train_len].drop(df_train[
         (df_train['1stFlrSF']>3000) & (df_train['SalePrice']<200000)
         ].index, inplace=True)
-df_train.drop(df_train[
+df_train[:train_len].drop(df_train[
         (df_train['TotalBsmtSF']>6000) & (df_train['SalePrice']<200000)
         ].index, inplace=True)
-df_train.drop(df_train[
+df_train[:train_len].drop(df_train[
         (df_train['GarageArea']>1200)
         ].index, inplace=True)
     
-# Agora, observemos a distribuição destas variáveis
+# Agora, observemos a distribuição destas variáveis e também do target
 sns.distplot(df_train['GrLivArea'] , bins=50,fit=norm);
 plt.show()
 sns.distplot(df_train['1stFlrSF'] , bins=50,fit=norm);
@@ -260,22 +266,105 @@ sns.distplot(df_train['TotalBsmtSF'] , bins=50,fit=norm);
 plt.show()
 sns.distplot(df_train['GarageArea'] , bins=50,fit=norm);
 plt.show()
+sns.distplot(df_train[:train_len]['SalePrice'], bins=50, fit=norm);
+plt.show()
+
+# Observa-se que algumas variáveis e o alvo possuem assimetria (skewness) acentuada.
+# Para normalizar esta situação e facilitar o treinamento dos modelos,
+# Aplicaremos transformação logaritmica nas variaveis que apresentarem essa caracteristica.
+
+df_train['SalePrice'][:train_len] = np.log1p(df_train['SalePrice'][:train_len])
+
+skewness = df_train.select_dtypes(exclude='object').apply(lambda x: stats.skew(x))
+skewness = skewness[abs(skewness) > 0.6]
+skewed_features = skewness.index
+df_train[skewed_features] = np.log1p(df_train[skewed_features])
+ 
 
     
 # Gerar dummies das categoricas
 df_train = pd.get_dummies(df_train)
+
     
 # 1o treinamento
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import LinearRegression, LassoCV
 
 train_set = df_train[:train_len]
+test_set = df_train[train_len:].drop('SalePrice',axis=1)
 X_train, X_test, Y_train, Y_test = train_test_split(
         train_set.drop('SalePrice',axis=1), train_set.SalePrice)
+
+sns.distplot(Y_train)
+sns.distplot(Y_test)
+
+# Padronização das features para media 0 e variância 1
+stdSc = StandardScaler()
+X_train = stdSc.fit_transform(X_train)
+X_test = stdSc.transform(X_test)
+
 
 lr = LinearRegression()
 lr.fit(X_train, Y_train)
 
-scr_tr = lr.score(X_train, Y_train)
-scr_ts = lr.score(X_test, Y_test)
 
-result = lr.predict(df_train[train_len:].drop('SalePrice', axis=1))
+scr_tr_lr = lr.score(X_train, Y_train)
+scr_ts_lr = lr.score(X_test, Y_test)
+print(scr_tr_lr,scr_ts_lr)
+pred_train_lr = lr.predict(X_train)
+pred_test_lr = lr.predict(X_test)
+
+plt.scatter(pred_train_lr, Y_train, c = "blue", marker = "s", label = "Treino")
+plt.scatter(pred_test_lr, Y_test, c = "lightgreen", marker = "s", label = "Validação")
+plt.title("Regressão Linear sem Regularização")
+plt.xlabel("Previsto")
+plt.ylabel("Real")
+plt.legend(loc = "upper left")
+plt.plot([10.5, 13.5], [10.5, 13.5], c = "red")
+plt.show()
+
+# A regressão linear se mostrou inutilizavel neste caso.
+# Agora com regularização Lasso, esperamos obter uma performance muito superior.
+lass_alphas = [0.00005, 0.0001, 0.0003, 0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1]
+lass = LassoCV(alphas = lass_alphas, 
+               max_iter = 100000,
+               cv = 10)
+lass.fit(X_train, Y_train)
+best_alpha = lass.alpha_
+print("Alpha inicial:", best_alpha)
+# Agora inicializando a busca pelo melhor alpha a partir dos valores anteriores
+new_alphas = [ x * best_alpha for x in lass_alphas ]
+lass = LassoCV(alphas = new_alphas, 
+               max_iter = 10000,
+               cv = 10)
+lass.fit(X_train, Y_train)
+print("Alpha final:", lass.alpha_)
+
+# 
+scr_tr_lass = lass.score(X_train, Y_train)
+scr_ts_lass = lass.score(X_test, Y_test)
+print(scr_tr_lass,scr_ts_lass)
+prediction_test_lass = lass.predict(X_test)
+prediction_train_lass = lass.predict(X_train)
+
+# Vamos observar a performance do modelo utilizando Lasso
+plt.scatter(prediction_train_lass, Y_train, c = "blue", marker = "s", label = "Treino")
+plt.scatter(prediction_test_lass, Y_test, c = "lightgreen", marker = "s", label = "Validação")
+plt.title("Regressão Linear com Regularização Lasso")
+plt.xlabel("Previsto")
+plt.ylabel("Real")
+plt.legend(loc = "upper left")
+plt.plot([10.5, 13.5], [10.5, 13.5], c = "red")
+plt.show()
+
+# Gostei do modelo gerado com Lasso, farei a submissão para o Kaggle
+# Fazendo a transformação exponencial para compensar a logaritmica anterior
+pred = lass.predict(stdSc.transform(test_set))
+lass_sub = pd.DataFrame()
+lass_sub['Id'] = df_test['Id']
+lass_sub['SalePrice'] = np.expm1(pred)
+sns.distplot(lass_sub['SalePrice'])
+lass_sub.to_csv('submission_lass.csv', index = False)
+
+# O número de features ainda está muito alto... A seguir vou tentar reduzir
+# a quantidade de features e observar o comportamento dos modelos.
+
