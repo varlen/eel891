@@ -1,63 +1,76 @@
-## Entendimento do conjunto de dados
+# EEL891 - Introdução ao Aprendizado de Máquina - 2018.1
+## Universidade Federal do Rio de Janeiro - Relatório Final
 
-O conjunto de dados fornecido contempla 81 colunas com 1460 registros para teste e 1460 registros para treino. Utilizou-se a caracterização presente no arquivo data_description.txt para ter o significado de cada variável.
-
-Para obter uma inferência quantitativa menos heuristica, inicialmente as variáveis numéricas foram utilizadas para criação de gráficos de espalhamento, possibilitando estimar a influência individual de cada uma destas.
-
-OverallQual -> 0 a 10
-
-MiscVal --> Pode ser uma caracteristica qualquer. Devo descontar do valor final?
-
+#### Prof. Heraldo
+#### Aluno: Varlen Pavani Neto
 
 ---
 
------ LotShape vs LandContour
+## Descrição
 
-Ambas categorias parecem consideravelmente correlacionadas, porém LandContour parece mais regular.
+O trabalho consistiu em aplicar técnicas de aprendizado de máquina para a competição do Kaggle a seguir:
+[https://www.kaggle.com/c/house-prices-advanced-regression-techniques]()
 
-Foi gerado um mapa de calor incluindo as 10 variáveis mais correlacionadas com o preço da venda. 
+A descrição completa do trabalho pode ser encontrada em: 
+[http://www.del.ufrj.br/~heraldo/eel891_2018_01_Trabalho_1.pdf]()
+
+## Etapa Inicial
+
+Inicialmente, foram seguidos guias e tutoriais presentes no Kaggle. Também utilizei o livro Introduction to Python Machine Learning. Desenvolvi o código no Spyder.
+
+O conjunto de dados fornecido contempla 81 colunas com 1460 registros para teste e 1460 registros para treino. Utilizou-se a caracterização presente no arquivo data_description.txt para ter o significado de cada variável.
+
+Com o intuito de montar o algoritmo de aprendizado da maneira mais rapida, inicialmente realizei o tratamento das features de maneira grosseira, apenas completando os dados vazios, eliminando poucas variáveis que possuiam grande ausência de dados e codificando as variáveis conforme necessário, sem transformação logaritmica para tratar a assimetria das distribuições e sem Scalers. Neste momento, utilizei o RandomForestRegressor para obter as previsões e realizar a primeira submissão ao Kaggle. O código-fonte desta versão pode ser acessado através do histórico de versões do repositório git. Para este e os casos a seguir, utilizei a função ```train_test_data``` para dividir o conjunto de dados aleatoriamente em treino e validação, na proporção de 75% para 25%.
+
+Para obter uma inferência quantitativa menos heuristica, as variáveis numéricas foram utilizadas para criação de gráficos de espalhamento, possibilitando inferir a influência individual de cada uma destas. Também utilizei mapa de calor para visualizar as correlações entre as variáveis. Plots de distribuição possibilitaram a visualização da assimetria de algumas variáveis.
 
 <img src="./imagens/hm.png">
 
-O mapa de calor mostra que as variáveis GrLivArea e TotRmsAbvGrd, TotalBsmtSF e 1stFlrSF são altamente correlacionadas. Assim, TotalRmsAbvGrd e TotalBsmtSF foram desconsideradas. 
+## Regressor Linear e Regularização Lasso
 
-Após a observação do mapa de calor das correlações, observou-se o comportamento das variáveis com relação aos dados faltantes. 
+Posteriormente, tomei tempo para refinar o pré-processamento do conjunto de dados, tomando o cuidado de tratar os dados cuja distribuição era assimétrica. Nestes casos, foi aplicada a transformação de log(n+1). 
 
-```python
-total = df_train.isnull().sum().sort_values(ascending=False)
-percent = (df_train.isnull().sum()/df_train.isnull().count()).sort_values(ascending=False)
-missing_data = pd.concat([total, percent], axis=1, keys=['Total', 'Percent'])
-missing_data.head(20)
-```
+Utilizei o StandartScaler e o LinearRegressor num primeiro momento, porém o resultado obtido foi péssimo e as previsões, inexistentes. A partir disso, percebi a necessidade de aplicar alguma técnica de regularização. 
 
-Considerou-se que variáveis com mais de 10% de ausência seriam descartadas. Assim, eliminam-se PoolQC, MiscFeature, Alley, Fence, FireplaceQuality e LotFront   
+Já que o dataset possui um amplo número de features, optei por utilizar Lasso e verificar sua performance. Busquei o valor ótimo para o coeficiente e realizei as predições com base nestes parâmetros. Este modelo se mostrou melhor que o anterior e me permitiu subir algumas posições no ranking da competição. Infelizmente, no momento de realizar o upload, selecionei o resultado do modelo anterior, o que por um momento me fez pensar que ambos modelos tinham estranhamente o mesmo resultado.
 
+## Alterando as features e RobustScaler
 
+Por ultimo, resolvi tentar melhorar a performance do modelo alterando as variaveis. Para isso, combinei algumas variáveis e eliminei parte das variáveis categóricas. Para que o modelo se tornasse mais tolerante a outliers, apliquei o RobustScaler ao invés do StandartScaler.
 
-Com intuito de simplificar o conjunto de dados, algumas colunas foram desconsideradas. São essas a coluna Street que dentro dos dados de treino sempre apresentou o valor "Pave", Utilities que com exceção de um registro, apresentou valor "AllPub", 
+Porém, o resultado obtido não foi melhor que o anterior pois o modelo apresentou um overfitting maior, possivelmente estimulado pelas novas variáveis. 
 
+Para confirmar a hipótese do overfitting guiado pelas novas variáveis, eliminei as variaveis criadas e novamente realizei o treinamento com RobustScaler.
 
-### Passo-a-passo a ser adotado
-- Heatmap para visão geral
-    -> Mostra as relações lineares entre as variaveis
-- Pré-seleção com base nos scatter/Box plot para restante. Considerar pela desc.
->> https://stats.stackexchange.com/questions/31690/how-to-test-the-statistical-significance-for-categorical-variable-in-linear-regr 
+<img src="./imagens/lasso_robust.png">
 
-- Avaliar dados faltantes
-- Transformações para linearizar as que possuirem relações não-lineares (ver scatterplot) 
-    >> http://scipy.github.io/devdocs/generated/scipy.stats.boxcox.html
+Este último modelo foi o que obteve melhor performance localmente, porém a submissão foi levemente inferior ao Lasso+StandardScaler.
 
-    >> "Residual plot or standardized residual plot, or conduct a hypo testing."
+## Conclusão
 
-    >> "By the way, a log transform of data set containing zero values can be easily handled by numpy.log1p()"
-- "Dummyficar" as variaveis categoricas
-https://www.moresteam.com/WhitePapers/download/dummy-variables.pdf
-http://pbpython.com/categorical-encoding.html
-http://pandas.pydata.org/pandas-docs/stable/generated/pandas.get_dummies.html
+Foram desenvolvidos 4 modelos distintos utilizando Lasso, StandardScaler, RobustScaler e RandomForestRegressor. O modelo desenvolvido com Lasso+StandardScaler apresentou a maior performance.
+
+## Possíveis Continuações e Trabalhos Futuros
+
+Dentre as possibilidades de continuidade do trabalho, estão aplicar transfomação boxcox ao invés de log(n-1), continuar a diminuição do número de features, simplificar algumas features categoricas para diminuir a dimensionalidade dos dados de treino e observar o comportamento de outros tipos de regressores.
+Também acredito ser interessante a transformação do código-fonte Python utilizado em um notebook jupyter para facilitar a visualização dos dados, sem a necessidade de exportar plots.
+Outra possibilidade a ser explorada é a combinação de diferentes modelos.
 
 
->> Great explanation! Small comment though. In your last section, where you convert categorical variables into dummy variables, the command df_train = pd.get_dummies(df_train) would result in the dataset being perfectly multi-collinear. You would have to remove a column for each one of the categorical variable converted to dummy data! Cheers.
+## Referências
+- Introduction to Machine Learning with Python, Andreas C. Müller and Sarah Guido, 2016
 
+- https://stats.stackexchange.-com/questions/31690/how-to-test-the-statistical-significance-for-categorical-variable-in-linear-regr
 
+- http://scipy.github.io/devdocs/generated/scipy.stats.boxcox.html
+- https://www.moresteam.com/WhitePapers/download/dummy-variables.pdf
+- http://pbpython.com/categorical-encoding.html
+- http://pandas.pydata.org/pandas-docs/stable/generated/pandas.get_dummies.html
+- https://stackoverflow.com/questions/29241056/the-use-of-numpy-newaxis
+- http://pandas.pydata.org/pandas-docs/version/0.23/generated/pandas.DataFrame.loc.html
 
-https://stackoverflow.com/questions/29241056/the-use-of-numpy-newaxis
+- https://www.kaggle.com/pmarcelino/comprehensive-data-exploration-with-python/notebook
+- https://www.kaggle.com/serigne/stacked-regressions-top-4-on-leaderboard
+- https://www.kaggle.com/ryuheeeei/what-we-do-after-preprocessing
+- https://www.kaggle.com/juliencs/a-study-on-regression-applied-to-the-ames-dataset
+- https://www.kaggle.com/erikbruin/house-prices-lasso-xgboost-and-a-detailed-eda

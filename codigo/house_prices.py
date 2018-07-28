@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 from scipy.stats import norm
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, RobustScaler
 from sklearn.model_selection import train_test_split
 from scipy import stats
 import warnings
@@ -223,6 +223,10 @@ var_num = [ col
 #    plt.show()
 
 # Mapa de calor 
+corrmat = df_train.corr()
+plt.subplots(figsize=(12,9))
+sns.heatmap(corrmat, vmax=0.9, square=True,)
+
 corrmat = df_train[:train_len].corr()
 cols = corrmat.nlargest(10, 'SalePrice')['SalePrice'].index
 cm = np.corrcoef(df_train[cols].values.T)
@@ -233,6 +237,33 @@ plt.show()
 
 # Colunas mais correlacionadas
 print(cols)
+
+# Criando variaveis artificiais a partir do dataset
+#df_train['TotalSF'] = df_train['TotalBsmtSF'] + df_train['1stFlrSF'] + df_train['2ndFlrSF'] + df_train['LotArea']
+df_train['GarageScore'] = df_train['GarageArea'] * df_train['GarageCars'] * df_train['GarageCond'] * df_train['GarageQual']
+#df_train['OverallScore'] = df_train['OverallCond'] * df_train['OverallQual']
+#df_train['ExternalScore'] = df_train['ExterQual'] * df_train['ExterCond']
+#df_train['BasementScore'] = df_train['BsmtQual'] * df_train['BsmtCond']
+#df_train['RoomSpace'] = (df_train['1stFlrSF'] + df_train['2ndFlrSF']) / df_train['TotRmsAbvGrd']
+df_train['IsFunctional'] = df_train['Functional']
+df_train.replace({ 'IsFunctional' : { 'Typ':1, 'Min1':1, 'Min2':1, 'Mod': 1, 
+                                     'Maj1':0, 'Maj2':0, 'Sev':0, 'Sal':0}}, inplace = True)
+
+# Removendo variaveis que não acrescentam informação
+df_train.drop('GarageQual',axis=1, inplace = True)
+df_train.drop('Utilities',axis=1, inplace = True)
+df_train.drop('GarageCars',axis=1, inplace = True)
+df_train.drop('YrSold',axis=1, inplace = True)
+df_train.drop('YearRemodAdd',axis=1, inplace = True)
+df_train.drop('PavedDrive',axis=1, inplace = True)
+df_train.drop('Exterior2nd',axis=1, inplace = True)
+df_train.drop('Electrical',axis=1, inplace = True)
+df_train.drop('GarageType',axis=1, inplace = True)
+df_train.drop('RoofStyle',axis=1, inplace = True)
+df_train.drop('RoofMatl',axis=1, inplace = True)
+df_train.drop('SaleCondition',axis=1, inplace = True)
+df_train.drop('Functional', axis=1,inplace = True)
+
 
 # O mapa de calor mostra as variaveis numericas OverallQual, GrLivArea, ExterQual, 
 # KitchenQual, 'GarageCars, GarageArea, TotalBsmtSF, 1stFlrSF e BsmtQual 
@@ -302,7 +333,6 @@ stdSc = StandardScaler()
 X_train = stdSc.fit_transform(X_train)
 X_test = stdSc.transform(X_test)
 
-
 lr = LinearRegression()
 lr.fit(X_train, Y_train)
 
@@ -365,6 +395,56 @@ lass_sub['SalePrice'] = np.expm1(pred)
 sns.distplot(lass_sub['SalePrice'])
 lass_sub.to_csv('submission_lass.csv', index = False)
 
+
+
 # O número de features ainda está muito alto... A seguir vou tentar reduzir
 # a quantidade de features e observar o comportamento dos modelos.
+## Neste ponto, diminuí o numero de features categoricas e criei features artificiais
+# Para melhorar a tolerancia a outliers, vou utilizar o RobustScaler ao invés do
+# StandartScaler desta vez, também para o lasso.
 
+rbSc = RobustScaler()
+
+train_set = df_train[:train_len]
+test_set = df_train[train_len:].drop('SalePrice',axis=1)
+X_train, X_test, Y_train, Y_test = train_test_split(
+        train_set.drop('SalePrice',axis=1), train_set.SalePrice)
+
+X_train = rbSc.fit_transform(X_train)
+X_test = rbSc.transform(X_test)
+
+lass_alphas = [0.00005, 0.0001, 0.0003, 0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1]
+lass = LassoCV(alphas = lass_alphas, 
+               max_iter = 100000,
+               cv = 10)
+lass.fit(X_train, Y_train)
+best_alpha = lass.alpha_
+print("Alpha inicial:", best_alpha)
+# Agora inicializando a busca pelo melhor alpha a partir dos valores anteriores
+new_alphas = [ x * best_alpha for x in lass_alphas ]
+lass = LassoCV(alphas = new_alphas, 
+               max_iter = 100000,
+               cv = 10)
+lass.fit(X_train, Y_train)
+print("Alpha final:", lass.alpha_)
+scr_tr_lass = lass.score(X_train, Y_train)
+scr_ts_lass = lass.score(X_test, Y_test)
+print(scr_tr_lass,scr_ts_lass)
+prediction_test_lass = lass.predict(X_test)
+prediction_train_lass = lass.predict(X_train)
+
+plt.scatter(prediction_train_lass, Y_train, c = "blue", marker = "s", label = "Treino")
+plt.scatter(prediction_test_lass, Y_test, c = "lightgreen", marker = "s", label = "Validação")
+plt.title("Lasso e RobustScaler")
+plt.xlabel("Previsto")
+plt.ylabel("Real")
+plt.legend(loc = "upper left")
+plt.plot([10.5, 13.5], [10.5, 13.5], c = "red")
+plt.show()
+
+pred = lass.predict(rbSc.transform(test_set))
+lass_sub = pd.DataFrame()
+lass_sub['Id'] = df_test['Id']
+lass_sub['SalePrice'] = np.expm1(pred)
+sns.distplot(lass_sub['SalePrice'])
+lass_sub.to_csv('submission_lass_rd.csv', index = False)
